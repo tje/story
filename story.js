@@ -11,11 +11,22 @@ function Story (ns) {
   var events = [];
 
   var _escapeRexp = function (key) {
-    return key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    return key && key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') || '';
   };
+
+  var namespace = ns || 'story';
+
+  var useCookies = false;
+
+  var YEAR = 365 * 24 * 60 * 60 * 1000;
 
   var _enc = function (value) {
     var type = typeof value;
+
+    if (type === 'object' && value instanceof Date) {
+      type = 'date';
+    }
+
     var pre = 'S';
 
     switch (type) {
@@ -28,6 +39,10 @@ function Story (ns) {
       case 'array':
         pre = 'A';
         value = JSON.stringify(value);
+      break;
+      case 'date':
+        pre = 'D';
+        value = value.toISOString();
       case 'string':
       default:
       break;
@@ -53,6 +68,9 @@ function Story (ns) {
       case 'A':
         value = JSON.parse(value);
       break;
+      case 'D':
+        value = new Date(value);
+      break;
     }
 
     return value;
@@ -62,7 +80,7 @@ function Story (ns) {
     var map = [];
     for (var i in obj) {
       if (obj.hasOwnProperty(i)) {
-        if (typeof obj[i] === 'object') {
+        if (typeof obj[i] === 'object' && !(obj[i] instanceof Date)) {
           var subMap = _makeMap(obj[i]);
           subMap.forEach(function (mapItem) {
             mapItem.key = i + delimiter + mapItem.key;
@@ -83,7 +101,7 @@ function Story (ns) {
     var out = [];
     var pattern = new RegExp('^' + _escapeRexp(key + delimiter));
 
-    for (var i in ls) {
+    for (var i in _list()) {
       if (!key || i.match(pattern)) {
         out.push(i);
       }
@@ -102,17 +120,26 @@ function Story (ns) {
 
   this.set = function (key, value) {
     var map;
-    if (typeof value === 'object') {
-      this.delete(key);
+
+    if (typeof key === 'object' && !value) {
+      value = key;
+      key = false;
+    }
+
+    if (typeof value === 'object' && !(value instanceof Date)) {
+      if (key) {
+        this.delete(key);
+      }
       map = _makeMap(value);
       map.forEach(function (mapItem) {
-        ls.setItem(key + delimiter + mapItem.key, _enc(mapItem.value));
+        _set((key && key + delimiter || '') + mapItem.key, _enc(mapItem.value));
       });
     } else {
-      ls.setItem(key, _enc(value));
+      _set(key, _enc(value));
       map = _getMap(key);
-      map.map(ls.removeItem.bind(ls));
+      map.map(_remove.bind(ls));
     }
+    _updateCookie.call(this);
   };
 
   var _nest = function (obj, key, value) {
@@ -137,20 +164,19 @@ function Story (ns) {
     var map = _getMap(key);
     var out = {};
 
-    var existing = ls.getItem(key) && _dec(ls.getItem(key));
-    if (existing === null) {
+    var existing = _get(key);
+    if (typeof existing === 'string') {
+      existing = _dec(_get(key));
+    } else {
       existing = defaults[key];
     }
-    if (map.length === 0 && existing !== null) {
+
+    if (key && map.length === 0 && existing !== null) {
       return existing;
     }
 
     map.forEach(function (mapKey) {
-      var existing = ls.getItem(mapKey) && _dec(ls.getItem(mapKey));
-      if (existing === null) {
-        existing = defaults[mapKey];
-      }
-      _nest(out, mapKey, existing);
+      _nest(out, mapKey, _get(mapKey) && _dec(_get(mapKey)) || defaults[mapKey]);
     });
 
     if (key) {
@@ -165,7 +191,9 @@ function Story (ns) {
   this.delete = function (key) {
     var map = _getMap(key);
 
-    map.forEach(ls.removeItem.bind(ls));
+    map.push(key);
+    map.forEach(_remove.bind(this));
+    _updateCookie.call(this);
   };
 
   this.clear = function () {
@@ -188,6 +216,80 @@ function Story (ns) {
 
   var _handleChange = function (ev) {
     console.log(ev);
+  };
+
+  var _set = function (key, value) {
+    return ls.setItem(namespace + delimiter + key, value);
+  };
+
+  var _get = function (key) {
+    return ls.getItem(namespace + delimiter + key);
+  };
+
+  var _remove = function (key) {
+    return ls.removeItem(namespace + delimiter + key);
+  };
+
+  var _list = function () {
+    var o = {};
+    var pattern = new RegExp('^' + _escapeRexp(namespace + delimiter));
+    for (var i in ls) {
+      if (ls.hasOwnProperty(i) && i.match(pattern)) {
+        o[i.replace(pattern, '')] = ls[i];
+      }
+    }
+    return o;
+  };
+
+  var _updateCookie = function () {
+    if (useCookies && document) {
+      var expiryDate = new Date();
+      expiryDate.setTime(expiryDate.getTime() + YEAR);
+
+      var store = btoa(unescape(encodeURIComponent(JSON.stringify(this.get()))));
+
+      var cookieStr = namespace + '=' + store
+                    + '; expires=' + expiryDate.toUTCString()
+                    + '; path=/';
+
+      if (cookieStr.length > 4000) {
+        _warn('Unstable cookie fallback (' + cookieStr.length + ' characters long)');
+      }
+
+      document.cookie = cookieStr;
+    }
+  };
+
+  this._restoreFromCookie = function () {
+    if (useCookies && document) {
+      var cookies = document.cookie.split('; '),
+          cookie = false;
+
+      for (var i = 0; i < cookies.length; i++) {
+        if (cookies[i].substr(0, namespace.length + 1) === namespace + '=') {
+          cookie = cookies[i].substr(namespace.length + 1);
+          break;
+        }
+      }
+
+      if (cookie) {
+        cookie = JSON.parse(decodeURIComponent(escape(atob(cookie))));
+        this.set(cookie);
+      }
+    }
+  };
+
+  this.config = function (options) {
+    if (options.hasOwnProperty('useCookies')) {
+      useCookies = !!options['useCookies'];
+      if (useCookies) {
+        this._restoreFromCookie();
+      }
+    }
+  };
+
+  var _warn = function (msg) {
+    return console.warn('Story: ' + msg);
   };
 
   return this;
