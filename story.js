@@ -1,5 +1,5 @@
 /*global window*/
-function Story () {
+function Story (ns) {
   var delimiter = '.';
 
   var ls = window.localStorage;
@@ -9,6 +9,8 @@ function Story () {
   var _escapeRexp = function (key) {
     return key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
   };
+
+  var namespace = ns || 'story';
 
   var _enc = function (value) {
     var type = typeof value;
@@ -24,6 +26,7 @@ function Story () {
       case 'array':
         pre = 'A';
         value = JSON.stringify(value);
+      break;
       case 'string':
       default:
       break;
@@ -79,7 +82,7 @@ function Story () {
     var out = [];
     var pattern = new RegExp('^' + _escapeRexp(key + delimiter));
 
-    for (var i in ls) {
+    for (var i in _list()) {
       if (!key || i.match(pattern)) {
         out.push(i);
       }
@@ -102,12 +105,12 @@ function Story () {
       this.delete(key);
       map = _makeMap(value);
       map.forEach(function (mapItem) {
-        ls.setItem(key + delimiter + mapItem.key, _enc(mapItem.value));
+        _set(key + delimiter + mapItem.key, _enc(mapItem.value));
       });
     } else {
-      ls.setItem(key, _enc(value));
+      _set(key, _enc(value));
       map = _getMap(key);
-      map.map(ls.removeItem.bind(ls));
+      map.map(_remove.bind(ls));
     }
   };
 
@@ -133,13 +136,13 @@ function Story () {
     var map = _getMap(key);
     var out = {};
 
-    var existing = ls.getItem(key) && _dec(ls.getItem(key)) || defaults[key];
-    if (map.length === 0 && existing !== null) {
+    var existing = _get(key) && _dec(_get(key)) || defaults[key];
+    if (key && map.length === 0 && existing !== null) {
       return existing;
     }
 
     map.forEach(function (mapKey) {
-      _nest(out, mapKey, ls.getItem(mapKey) && _dec(ls.getItem(mapKey)) || defaults[mapKey]);
+      _nest(out, mapKey, _get(mapKey) && _dec(_get(mapKey)) || defaults[mapKey]);
     });
 
     if (key) {
@@ -154,7 +157,7 @@ function Story () {
   this.delete = function (key) {
     var map = _getMap(key);
 
-    map.forEach(ls.removeItem.bind(ls));
+    map.forEach(_remove.bind(ls));
   };
 
   this.clear = function () {
@@ -166,6 +169,29 @@ function Story () {
     _makeMap(obj).forEach(function (mapItem) {
       defaults[mapItem.key] = mapItem.value;
     });
+  };
+
+  var _set = function (key, value) {
+    return ls.setItem(namespace + delimiter + key, value);
+  };
+
+  var _get = function (key) {
+    return ls.getItem(namespace + delimiter + key);
+  };
+
+  var _remove = function (key) {
+    return ls.removeItem(namespace + delimiter + key);
+  };
+
+  var _list = function () {
+    var o = {};
+    var pattern = new RegExp('^' + _escapeRexp(namespace + delimiter));
+    for (var i in ls) {
+      if (ls.hasOwnProperty(i) && i.match(pattern)) {
+        o[i.replace(pattern, '')] = ls[i];
+      }
+    }
+    return o;
   };
 
   return this;
