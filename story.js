@@ -1,10 +1,14 @@
 /*global window*/
-function Story () {
+function Story (ns) {
   var delimiter = '.';
 
   var ls = window.localStorage;
 
   var defaults = false;
+
+  var namespace = ns || 'story';
+
+  var events = [];
 
   var _escapeRexp = function (key) {
     return key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
@@ -133,13 +137,20 @@ function Story () {
     var map = _getMap(key);
     var out = {};
 
-    var existing = ls.getItem(key) && _dec(ls.getItem(key)) || defaults[key];
+    var existing = ls.getItem(key) && _dec(ls.getItem(key));
+    if (existing === null) {
+      existing = defaults[key];
+    }
     if (map.length === 0 && existing !== null) {
       return existing;
     }
 
     map.forEach(function (mapKey) {
-      _nest(out, mapKey, ls.getItem(mapKey) && _dec(ls.getItem(mapKey)) || defaults[mapKey]);
+      var existing = ls.getItem(mapKey) && _dec(ls.getItem(mapKey));
+      if (existing === null) {
+        existing = defaults[mapKey];
+      }
+      _nest(out, mapKey, existing);
     });
 
     if (key) {
@@ -166,6 +177,17 @@ function Story () {
     _makeMap(obj).forEach(function (mapItem) {
       defaults[mapItem.key] = mapItem.value;
     });
+  };
+
+  this.on = function (key, callback) {
+    events.push({
+      key: key,
+      callback: callback
+    });
+  };
+
+  var _handleChange = function (ev) {
+    console.log(ev);
   };
 
   return this;
