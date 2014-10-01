@@ -7,10 +7,14 @@ function Story (ns) {
   var defaults = false;
 
   var _escapeRexp = function (key) {
-    return key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    return key && key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') || '';
   };
 
   var namespace = ns || 'story';
+
+  var useCookies = false;
+
+  var YEAR = 365 * 24 * 60 * 60 * 1000;
 
   var _enc = function (value) {
     var type = typeof value;
@@ -112,17 +116,26 @@ function Story (ns) {
 
   this.set = function (key, value) {
     var map;
+
+    if (typeof key === 'object' && !value) {
+      value = key;
+      key = false;
+    }
+
     if (typeof value === 'object' && !(value instanceof Date)) {
-      this.delete(key);
+      if (key) {
+        this.delete(key);
+      }
       map = _makeMap(value);
       map.forEach(function (mapItem) {
-        _set(key + delimiter + mapItem.key, _enc(mapItem.value));
+        _set((key && key + delimiter || '') + mapItem.key, _enc(mapItem.value));
       });
     } else {
       _set(key, _enc(value));
       map = _getMap(key);
       map.map(_remove.bind(ls));
     }
+    _updateCookie.call(this);
   };
 
   var _nest = function (obj, key, value) {
@@ -147,7 +160,13 @@ function Story (ns) {
     var map = _getMap(key);
     var out = {};
 
-    var existing = _get(key) && _dec(_get(key)) || defaults[key];
+    var existing = _get(key);
+    if (typeof existing === 'string') {
+      existing = _dec(_get(key));
+    } else {
+      existing = defaults[key];
+    }
+
     if (key && map.length === 0 && existing !== null) {
       return existing;
     }
@@ -168,7 +187,9 @@ function Story (ns) {
   this.delete = function (key) {
     var map = _getMap(key);
 
-    map.forEach(_remove.bind(ls));
+    map.push(key);
+    map.forEach(_remove.bind(this));
+    _updateCookie.call(this);
   };
 
   this.clear = function () {
@@ -203,6 +224,57 @@ function Story (ns) {
       }
     }
     return o;
+  };
+
+  var _updateCookie = function () {
+    if (useCookies && document) {
+      var expiryDate = new Date();
+      expiryDate.setTime(expiryDate.getTime() + YEAR);
+
+      var store = btoa(unescape(encodeURIComponent(JSON.stringify(this.get()))));
+
+      var cookieStr = namespace + '=' + store
+                    + '; expires=' + expiryDate.toUTCString()
+                    + '; path=/';
+
+      if (cookieStr.length > 4000) {
+        _warn('Unstable cookie fallback (' + cookieStr.length + ' characters long)');
+      }
+
+      document.cookie = cookieStr;
+    }
+  };
+
+  this._restoreFromCookie = function () {
+    if (useCookies && document) {
+      var cookies = document.cookie.split('; '),
+          cookie = false;
+
+      for (var i = 0; i < cookies.length; i++) {
+        if (cookies[i].substr(0, namespace.length + 1) === namespace + '=') {
+          cookie = cookies[i].substr(namespace.length + 1);
+          break;
+        }
+      }
+
+      if (cookie) {
+        cookie = JSON.parse(decodeURIComponent(escape(atob(cookie))));
+        this.set(cookie);
+      }
+    }
+  };
+
+  this.config = function (options) {
+    if (options.hasOwnProperty('useCookies')) {
+      useCookies = !!options['useCookies'];
+      if (useCookies) {
+        this._restoreFromCookie();
+      }
+    }
+  };
+
+  var _warn = function (msg) {
+    return console.warn('Story: ' + msg);
   };
 
   return this;
