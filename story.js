@@ -14,6 +14,11 @@ function Story (ns) {
 
   var _enc = function (value) {
     var type = typeof value;
+
+    if (type === 'object' && value instanceof Date) {
+      type = 'date';
+    }
+
     var pre = 'S';
 
     switch (type) {
@@ -27,6 +32,9 @@ function Story (ns) {
         pre = 'A';
         value = JSON.stringify(value);
       break;
+      case 'date':
+        pre = 'D';
+        value = value.toISOString();
       case 'string':
       default:
       break;
@@ -52,6 +60,9 @@ function Story (ns) {
       case 'A':
         value = JSON.parse(value);
       break;
+      case 'D':
+        value = new Date(value);
+      break;
     }
 
     return value;
@@ -61,7 +72,7 @@ function Story (ns) {
     var map = [];
     for (var i in obj) {
       if (obj.hasOwnProperty(i)) {
-        if (typeof obj[i] === 'object') {
+        if (typeof obj[i] === 'object' && !(obj[i] instanceof Date)) {
           var subMap = _makeMap(obj[i]);
           subMap.forEach(function (mapItem) {
             mapItem.key = i + delimiter + mapItem.key;
@@ -101,7 +112,7 @@ function Story (ns) {
 
   this.set = function (key, value) {
     var map;
-    if (typeof value === 'object') {
+    if (typeof value === 'object' && !(value instanceof Date)) {
       this.delete(key);
       map = _makeMap(value);
       map.forEach(function (mapItem) {
