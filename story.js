@@ -271,6 +271,12 @@ function Story (ns) {
         this._restoreFromCookie();
       }
     }
+
+    if (options.hasOwnProperty('defaults')) {
+      this.defaults(options.defaults);
+    }
+
+    return this;
   };
 
   var _warn = function (msg) {
