@@ -6,11 +6,15 @@ function Story (ns) {
 
   var defaults = false;
 
+  var namespace = ns || 'story';
+
+  var events = [];
+
+  var eventRecursionThreshold = 1;
+
   var _escapeRexp = function (key) {
     return key && key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') || '';
   };
-
-  var namespace = ns || 'story';
 
   var useCookies = false;
 
@@ -124,7 +128,7 @@ function Story (ns) {
 
     if (typeof value === 'object' && !(value instanceof Date)) {
       if (key) {
-        this.delete(key);
+        _removeInternal.call(this, key);
       }
       map = _makeMap(value);
       map.forEach(function (mapItem) {
@@ -135,6 +139,7 @@ function Story (ns) {
       map = _getMap(key);
       map.map(_remove.bind(ls));
     }
+    _handleChange.call(this, key, value);
     _updateCookie.call(this);
   };
 
@@ -190,16 +195,14 @@ function Story (ns) {
     return out;
   };
 
-  this.delete = function (key) {
-    var map = _getMap(key);
-
-    map.push(key);
-    map.forEach(_remove.bind(this));
+  this.remove = function (key) {
+    _removeInternal.call(this, key);
+    _handleChange.call(this, key);
     _updateCookie.call(this);
   };
 
   this.clear = function () {
-    this.delete();
+    this.remove();
   };
 
   this.defaults = function (obj) {
@@ -207,6 +210,42 @@ function Story (ns) {
     _makeMap(obj).forEach(function (mapItem) {
       defaults[mapItem.key] = mapItem.value;
     });
+  };
+
+  this.on = function (key, callback) {
+    events.push({
+      key: key,
+      callback: callback,
+      recursor: 0
+    });
+  };
+
+  this.off = function (key) {
+    if (!key) {
+      events = [];
+      return;
+    };
+    events.forEach(function (event, idx) {
+      if (event.key === key) {
+        events.splice(idx, 1);
+      }
+    });
+  };
+
+  var _handleChange = function (key, value) {
+    if (typeof key !== 'string') {
+      return false;
+    }
+
+    do {
+      events.forEach(function (event) {
+        if (event.key === key && event.recursor < eventRecursionThreshold) {
+          event.recursor++;
+          event.callback(this.get(key));
+          event.recursor = 0;
+        }
+      }.bind(this));
+    } while (key = key.substr(0, key.lastIndexOf(delimiter)));
   };
 
   var _set = function (key, value) {
@@ -219,6 +258,13 @@ function Story (ns) {
 
   var _remove = function (key) {
     return ls.removeItem(namespace + delimiter + key);
+  };
+
+  var _removeInternal = function (key) {
+    var map = _getMap(key);
+
+    map.push(key);
+    map.forEach(_remove.bind(this));
   };
 
   var _list = function () {
@@ -280,6 +326,10 @@ function Story (ns) {
 
     if (options.hasOwnProperty('defaults')) {
       this.defaults(options.defaults);
+    }
+
+    if (options.hasOwnProperty('eventRecursion')) {
+      eventRecursionThreshold = Math.max(1, parseInt(options.eventRecursion, 10) || 1);
     }
 
     return this;
