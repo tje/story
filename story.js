@@ -172,7 +172,13 @@ function Story (ns) {
     }
 
     map.forEach(function (mapKey) {
-      _nest(out, mapKey, _get(mapKey) && _dec(_get(mapKey)) || defaults[mapKey]);
+      var mapExisting = _get(mapKey);
+      if (typeof mapExisting === 'string') {
+        mapExisting = _dec(_get(mapKey));
+      } else {
+        mapExisting = defaults[mapKey];
+      }
+      _nest(out, mapKey, mapExisting);
     });
 
     if (key) {
