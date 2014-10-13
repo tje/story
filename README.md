@@ -44,7 +44,7 @@ store.on('test.one', function () {
 store.off('test.one');
 
 // Delete something
-store.delete('test');
+store.remove('test');
 ```
 
 ## Event listener recursion
