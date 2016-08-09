@@ -161,6 +161,32 @@ function Story (ns) {
     return obj;
   };
 
+  // Convert objects that appear to be arrays to arrays
+  var _filter = function (obj) {
+    if (typeof obj !== 'object') {
+      return obj;
+    }
+
+    var keys = Object.keys(obj);
+    var keysStr = keys.map(Number).toString();
+    var rangeStr = Object.keys(new Int8Array(keys.length)).map(Number).toString();
+    if (keysStr === rangeStr) {
+      var o = [];
+      keys.forEach(function (key) {
+        o.push(obj[key]);
+      });
+      obj = o;
+    }
+
+    for (var i in obj) {
+      if (obj.hasOwnProperty(i) && typeof obj[i] === 'object') {
+        obj[i] = _filter(obj[i]);
+      }
+    }
+
+    return obj;
+  };
+
   this.get = function (key) {
     var map = _getMap(key);
     var out = {};
@@ -191,6 +217,8 @@ function Story (ns) {
         out = out && out[keyDown];
       });
     }
+
+    out = _filter(out);
 
     return out;
   };
